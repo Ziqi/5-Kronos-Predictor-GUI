@@ -68,7 +68,7 @@ def main():
     try:
         df = pd.read_csv(args.csv)
         # Rename columns to match Kronos requirement
-        rename_map = {'vol': 'volume', 'amt': 'amount', 'Datetime': 'datetime', 'DateTime': 'datetime'}
+        rename_map = {'vol': 'volume', 'amt': 'amount', 'Datetime': 'datetime', 'DateTime': 'datetime', 'timestamps': 'datetime'}
         df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns}, inplace=True)
         
         if 'datetime' in df.columns:
@@ -127,7 +127,7 @@ def main():
     
     with torch.no_grad():
         # Step 1: Encode historical context into tokens
-        s1_context, s2_context = tokenizer.encode(x_tensor)
+        s1_context, s2_context = tokenizer.encode(x_tensor, half=True)
         
         # We will autoregressively generate step by step
         for sample_i in range(args.num_samples):
@@ -165,9 +165,44 @@ def main():
     # Create final output DataFrame
     out_df = pd.DataFrame(final_pred_real, columns=feat_cols)
     
-    # Mock future datetimes for output (naive 5min increments)
+    # -----------------------------------------------------------------
+    # A-Share Trading Calendar Drift Algorithm
+    # Trading hours: 09:30-11:30, 13:00-15:00. Closed on weekends.
+    # -----------------------------------------------------------------
+    def get_next_trading_time(current_time):
+        next_t = current_time + pd.Timedelta(minutes=5)
+        
+        while True:
+            # Skip weekends
+            if next_t.weekday() >= 5:
+                next_t = next_t.replace(hour=9, minute=35, second=0) + pd.Timedelta(days=(7 - next_t.weekday()))
+                continue
+                
+            time_str = next_t.strftime("%H:%M")
+            # Morning trading: 09:35 to 11:30 (data is labeled at the END of the 5m interval)
+            # Afternoon trading: 13:05 to 15:00
+            if ('09:30' < time_str <= '11:30') or ('13:00' < time_str <= '15:00'):
+                break
+                
+            # If after 11:30 but before 13:05, jump to 13:05
+            if '11:30' < time_str <= '13:00':
+                next_t = next_t.replace(hour=13, minute=5, second=0)
+            # If after 15:00, jump to 09:35 of the next day
+            elif time_str > '15:00':
+                next_t = (next_t + pd.Timedelta(days=1)).replace(hour=9, minute=35, second=0)
+            # If before 09:35, jump to 09:35
+            else:
+                next_t = next_t.replace(hour=9, minute=35, second=0)
+                
+        return next_t
+
     last_dt = df_window['datetime'].iloc[-1]
-    future_dts = [last_dt + pd.Timedelta(minutes=5*(i+1)) for i in range(args.pred_len)]
+    future_dts = []
+    curr_dt = last_dt
+    for _ in range(args.pred_len):
+        curr_dt = get_next_trading_time(curr_dt)
+        future_dts.append(curr_dt)
+        
     out_df.insert(0, 'datetime', future_dts)
     
     # Formatting to 3 decimals
