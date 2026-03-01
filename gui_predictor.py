@@ -10,6 +10,8 @@ import time
 import datetime
 import queue
 from pathlib import Path
+import pandas as pd
+import numpy as np
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
@@ -152,13 +154,48 @@ class PredictorMatrixGUI(ttk.Window):
         right_panel = tk.Frame(body_frame, bg=self.c_bg)
         right_panel.pack(side=LEFT, fill=BOTH, expand=True)
         
-        term_lf = DashFrame(right_panel, title=" 隔离环境流式推演输出 (Inference Stream) ", bg_color=self.c_bg, fg_color=self.c_gold, dash_color=self.c_gold_dim, font=("Menlo", 15, "bold"))
-        term_lf.pack(fill=BOTH, expand=True)
+        # Split right panel vertically
+        self.right_paned = ttk.PanedWindow(right_panel, orient=VERTICAL)
+        self.right_paned.pack(fill=BOTH, expand=True)
+        
+        # 1. VISUALIZATION AREA (Top)
+        viz_lf = DashFrame(self.right_paned, title=" 预言投影阵列 (Holographic Projections) ", bg_color=self.c_bg, fg_color=self.c_gold, dash_color=self.c_gold_dim, font=("Menlo", 15, "bold"))
+        self.right_paned.add(viz_lf, weight=3)
+        
+        # Split Visualization area horizontally (Chart Left, Table Right)
+        viz_paned = ttk.PanedWindow(viz_lf.content, orient=HORIZONTAL)
+        viz_paned.pack(fill=BOTH, expand=True)
+        
+        # Chart Canvas
+        chart_fr = tk.Frame(viz_paned, bg=self.c_panel)
+        viz_paned.add(chart_fr, weight=3)
+        self.chart_canvas = tk.Canvas(chart_fr, bg=self.c_panel, highlightthickness=0)
+        self.chart_canvas.pack(fill=BOTH, expand=True, padx=2, pady=2)
+        
+        # Data Treeview
+        tree_fr = tk.Frame(viz_paned, bg=self.c_panel)
+        viz_paned.add(tree_fr, weight=1)
+        
+        columns = ("Time", "Open", "High", "Low", "Close")
+        self.tree = ttk.Treeview(tree_fr, columns=columns, show="headings", height=8)
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=60, anchor=CENTER)
+        self.tree.column("Time", width=110)
+        
+        tree_scroll = ttk.Scrollbar(tree_fr, orient=VERTICAL, command=self.tree.yview, style="Hidden.Vertical.TScrollbar")
+        self.tree.configure(yscrollcommand=tree_scroll.set)
+        tree_scroll.pack(side=RIGHT, fill=Y)
+        self.tree.pack(side=LEFT, fill=BOTH, expand=True)
+        
+        # 2. TERMINAL AREA (Bottom)
+        term_lf = DashFrame(self.right_paned, title=" 隔离环境流式推演输出 (Inference Stream) ", bg_color=self.c_bg, fg_color=self.c_gold, dash_color=self.c_gold_dim, font=("Menlo", 15, "bold"))
+        self.right_paned.add(term_lf, weight=1)
         
         txt_frame = tk.Frame(term_lf.content, bg=self.c_panel)
         txt_frame.pack(fill=BOTH, expand=True, padx=5, pady=5)
         
-        self.log_widget = tk.Text(txt_frame, font=self.font_log, bg=self.c_panel, fg="#A0A0A0", insertbackground=self.c_fg, wrap=WORD, borderwidth=0, highlightthickness=0, spacing1=4, spacing3=4)
+        self.log_widget = tk.Text(txt_frame, height=8, font=self.font_log, bg=self.c_panel, fg="#A0A0A0", insertbackground=self.c_fg, wrap=WORD, borderwidth=0, highlightthickness=0, spacing1=4, spacing3=4)
         txt_scroll = ttk.Scrollbar(txt_frame, orient=tk.VERTICAL, command=self.log_widget.yview, style="Hidden.Vertical.TScrollbar")
         self.log_widget.configure(yscrollcommand=txt_scroll.set)
         
@@ -282,6 +319,11 @@ class PredictorMatrixGUI(ttk.Window):
             elif return_code == 0:
                 self.gui_log("\n[+] 未来时光线谱已成功收容入库！", "succ")
                 self.after(0, lambda: self.status_sign.config(text="推演完成", fg=self.c_green))
+                
+                # Automatically visualize the result
+                csv_name = Path(csv_path).stem
+                out_path = self.out_dir / f"{csv_name}_prediction_{self.pred_len_var.get()}m.csv"
+                self.after(0, lambda: self._visualize_predictions(out_path))
             else:
                 self.gui_log(f"\n[-] 推演引擎异常熔断 (Code: {return_code})", "err")
                 self.after(0, lambda: self.status_sign.config(text="异常终止", fg=self.c_red))
@@ -305,6 +347,87 @@ class PredictorMatrixGUI(ttk.Window):
                 self.process.terminate()
             except Exception as e:
                 self.gui_log(f"[-] 无法安全阻断: {e}", "err")
+
+    def _visualize_predictions(self, csv_path):
+        if not csv_path.exists():
+            return
+            
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception as e:
+            self.gui_log(f"[-] 无法读取预测结果: {e}", "err")
+            return
+            
+        # 1. Populate Treeview
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        for _, row in df.iterrows():
+            ts = pd.to_datetime(row['datetime']).strftime("%m-%d %H:%M")
+            self.tree.insert("", END, values=(ts, f"{row['open']:.2f}", f"{row['high']:.2f}", f"{row['low']:.2f}", f"{row['close']:.2f}"))
+            
+        # 2. Draw K-Lines on Canvas
+        self.chart_canvas.delete("all")
+        self.chart_canvas.update_idletasks()
+        
+        w = self.chart_canvas.winfo_width()
+        h = self.chart_canvas.winfo_height()
+        
+        if w < 50 or h < 50 or len(df) == 0:
+            return
+            
+        padding = 30
+        draw_w = w - padding * 2
+        draw_h = h - padding * 2
+        
+        min_p = df['low'].min()
+        max_p = df['high'].min()
+        max_p = df['high'].max() # Corrected min/max mapping
+        
+        # Add slight margin to y-axis
+        rng = max_p - min_p
+        if rng == 0: rng = 1
+        min_p -= rng * 0.05
+        max_p += rng * 0.05
+        rng = max_p - min_p
+        
+        candle_w = draw_w / len(df)
+        bar_w = candle_w * 0.7
+        half_bar = bar_w / 2
+        
+        # Draw horizontal grid lines
+        grid_steps = 4
+        for i in range(grid_steps + 1):
+            y = padding + i * (draw_h / grid_steps)
+            price = max_p - (i / grid_steps) * rng
+            self.chart_canvas.create_line(padding, y, w - padding, y, fill="#333333", dash=(2, 4))
+            self.chart_canvas.create_text(5, y, text=f"{price:.2f}", fill=self.c_gold_dim, anchor=W, font=("Menlo", 9))
+            
+        for i, row in df.iterrows():
+            cx = padding + i * candle_w + candle_w / 2
+            
+            o = padding + draw_h * (1 - (row['open'] - min_p) / rng)
+            c = padding + draw_h * (1 - (row['close'] - min_p) / rng)
+            hh = padding + draw_h * (1 - (row['high'] - min_p) / rng)
+            ll = padding + draw_h * (1 - (row['low'] - min_p) / rng)
+            
+            color = self.c_red if row['close'] < row['open'] else self.c_green
+            
+            # Draw wick
+            self.chart_canvas.create_line(cx, hh, cx, ll, fill=color, width=1.5)
+            
+            # Draw body
+            top = min(o, c)
+            bottom = max(o, c)
+            if top == bottom:
+                self.chart_canvas.create_line(cx - half_bar, top, cx + half_bar, top, fill=color, width=1.5)
+            else:
+                self.chart_canvas.create_rectangle(cx - half_bar, top, cx + half_bar, bottom, fill=color, outline=color)
+                
+            # Draw time labels for first/last
+            if i == 0 or i == len(df) - 1:
+                ts = pd.to_datetime(row['datetime']).strftime("%m-%d %H:%M")
+                self.chart_canvas.create_text(cx, h - 10, text=ts, fill=self.c_gold_dim, font=("Menlo", 9))
 
 class DashFrame(tk.Frame):
     def __init__(self, master, title, bg_color, fg_color, dash_color, font, **kwargs):
