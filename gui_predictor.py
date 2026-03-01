@@ -154,53 +154,44 @@ class PredictorMatrixGUI(ttk.Window):
         right_panel = tk.Frame(body_frame, bg=self.c_bg)
         right_panel.pack(side=LEFT, fill=BOTH, expand=True)
         
-        # Split right panel vertically
-        self.right_paned = ttk.PanedWindow(right_panel, orient=VERTICAL)
-        self.right_paned.pack(fill=BOTH, expand=True)
+        # 1. VISUALIZATION AREA (Top) - Clean, no logo/dashboard frame
+        viz_fr = tk.Frame(right_panel, bg=self.c_bg)
+        viz_fr.pack(fill=BOTH, expand=True, pady=(0, 10))
         
-        # 1. VISUALIZATION AREA (Top)
-        viz_lf = DashFrame(self.right_paned, title=" 预言投影阵列 (Holographic Projections) ", bg_color=self.c_bg, fg_color=self.c_gold, dash_color=self.c_gold_dim, font=("Menlo", 15, "bold"))
-        self.right_paned.add(viz_lf, weight=3)
-        
-        # Split Visualization area horizontally (Chart Left, Table Right)
-        viz_paned = ttk.PanedWindow(viz_lf.content, orient=HORIZONTAL)
-        viz_paned.pack(fill=BOTH, expand=True)
-        
-        # Chart Canvas
-        chart_fr = tk.Frame(viz_paned, bg=self.c_panel)
-        viz_paned.add(chart_fr, weight=3)
+        # Chart Canvas (Left)
+        chart_fr = tk.Frame(viz_fr, bg=self.c_panel, highlightthickness=1, highlightbackground=self.c_gold_dim)
+        chart_fr.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
         self.chart_canvas = tk.Canvas(chart_fr, bg=self.c_panel, highlightthickness=0)
-        self.chart_canvas.pack(fill=BOTH, expand=True, padx=2, pady=2)
+        self.chart_canvas.pack(fill=BOTH, expand=True)
         
-        # Data Treeview
-        tree_fr = tk.Frame(viz_paned, bg=self.c_panel)
-        viz_paned.add(tree_fr, weight=1)
+        # Data Treeview (Right)
+        tree_fr = tk.Frame(viz_fr, bg=self.c_panel, width=320)
+        tree_fr.pack(side=RIGHT, fill=Y)
+        tree_fr.pack_propagate(False)
         
         columns = ("Time", "Open", "High", "Low", "Close")
-        self.tree = ttk.Treeview(tree_fr, columns=columns, show="headings", height=8)
+        self.tree = ttk.Treeview(tree_fr, columns=columns, show="headings", height=15)
         for col in columns:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=60, anchor=CENTER)
-        self.tree.column("Time", width=110)
+            self.tree.column(col, width=50, anchor=CENTER)
+        self.tree.column("Time", width=95)
         
         tree_scroll = ttk.Scrollbar(tree_fr, orient=VERTICAL, command=self.tree.yview, style="Hidden.Vertical.TScrollbar")
         self.tree.configure(yscrollcommand=tree_scroll.set)
         tree_scroll.pack(side=RIGHT, fill=Y)
         self.tree.pack(side=LEFT, fill=BOTH, expand=True)
         
-        # 2. TERMINAL AREA (Bottom)
-        term_lf = DashFrame(self.right_paned, title=" 隔离环境流式推演输出 (Inference Stream) ", bg_color=self.c_bg, fg_color=self.c_gold, dash_color=self.c_gold_dim, font=("Menlo", 15, "bold"))
-        self.right_paned.add(term_lf, weight=1)
+        # 2. TERMINAL AREA (Bottom) - Clean, no dashboard frame
+        term_fr = tk.Frame(right_panel, bg=self.c_panel, height=200, highlightthickness=1, highlightbackground=self.c_gold_dim)
+        term_fr.pack(fill=X, side=BOTTOM)
+        term_fr.pack_propagate(False)
         
-        txt_frame = tk.Frame(term_lf.content, bg=self.c_panel)
-        txt_frame.pack(fill=BOTH, expand=True, padx=5, pady=5)
-        
-        self.log_widget = tk.Text(txt_frame, height=8, font=self.font_log, bg=self.c_panel, fg="#A0A0A0", insertbackground=self.c_fg, wrap=WORD, borderwidth=0, highlightthickness=0, spacing1=4, spacing3=4)
-        txt_scroll = ttk.Scrollbar(txt_frame, orient=tk.VERTICAL, command=self.log_widget.yview, style="Hidden.Vertical.TScrollbar")
+        self.log_widget = tk.Text(term_fr, font=self.font_log, bg=self.c_panel, fg="#A0A0A0", insertbackground=self.c_fg, wrap=WORD, borderwidth=0, highlightthickness=0, spacing1=4, spacing3=4)
+        txt_scroll = ttk.Scrollbar(term_fr, orient=tk.VERTICAL, command=self.log_widget.yview, style="Hidden.Vertical.TScrollbar")
         self.log_widget.configure(yscrollcommand=txt_scroll.set)
         
         txt_scroll.pack(side=RIGHT, fill=Y)
-        self.log_widget.pack(side=LEFT, fill=BOTH, expand=True)
+        self.log_widget.pack(side=LEFT, fill=BOTH, expand=True, padx=5, pady=5)
         
         # Colors for terminal
         self.log_widget.tag_config("sys", foreground=self.c_gold, font=("Menlo", 13, "bold"))
