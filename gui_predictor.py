@@ -158,23 +158,23 @@ class PredictorMatrixGUI(ttk.Window):
         viz_fr = tk.Frame(right_panel, bg=self.c_bg)
         viz_fr.pack(fill=BOTH, expand=True, pady=(0, 10))
         
-        # Chart Canvas (Left)
+        # Chart Canvas (Top Half)
         chart_fr = tk.Frame(viz_fr, bg=self.c_panel, highlightthickness=1, highlightbackground=self.c_gold_dim)
-        chart_fr.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
+        chart_fr.pack(side=TOP, fill=BOTH, expand=True, pady=(0, 10))
         self.chart_canvas = tk.Canvas(chart_fr, bg=self.c_panel, highlightthickness=0)
         self.chart_canvas.pack(fill=BOTH, expand=True)
         
-        # Data Treeview (Right)
-        tree_fr = tk.Frame(viz_fr, bg=self.c_panel, width=320)
-        tree_fr.pack(side=RIGHT, fill=Y)
+        # Data Treeview (Bottom Half)
+        tree_fr = tk.Frame(viz_fr, bg=self.c_panel, height=200)
+        tree_fr.pack(side=BOTTOM, fill=X)
         tree_fr.pack_propagate(False)
         
         columns = ("Time", "Open", "High", "Low", "Close")
-        self.tree = ttk.Treeview(tree_fr, columns=columns, show="headings", height=15)
+        self.tree = ttk.Treeview(tree_fr, columns=columns, show="headings")
         for col in columns:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=50, anchor=CENTER)
-        self.tree.column("Time", width=95)
+            self.tree.column(col, width=100, anchor=CENTER)
+        self.tree.column("Time", width=160)
         
         tree_scroll = ttk.Scrollbar(tree_fr, orient=VERTICAL, command=self.tree.yview, style="Hidden.Vertical.TScrollbar")
         self.tree.configure(yscrollcommand=tree_scroll.set)
